@@ -1,8 +1,10 @@
 package com.chartspire.candles;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Builds a live higher-timeframe candle from streamed lower-timeframe candle snapshots, such as an
@@ -126,6 +128,41 @@ public final class LiveCandleBuilder {
             lateBefore = bucketEnd;
         }
         return new Update(current, List.copyOf(closed), false);
+    }
+
+    /**
+     * Closes the open target candle once {@code nowMillis} is at or past its bucket end plus {@code
+     * settle}, for streams with no closed flag (CCXT) or that go quiet. Call it on a timer with the
+     * caller's clock. Later updates for the closed bucket are late, so a longer settle loses fewer
+     * trailing snapshots but closes later.
+     *
+     * @return the candle closed by this call, if any
+     */
+    public Optional<Candle> closeDue(long nowMillis, Duration settle) {
+        Objects.requireNonNull(settle, "settle");
+        if (settle.isNegative()) {
+            throw new IllegalArgumentException("settle must not be negative: " + settle);
+        }
+        if (!hasOpenBucket()) {
+            return Optional.empty();
+        }
+        long bucketEnd = target.nextBucketOpen(bucketOpen);
+        long settleMillis;
+        long dueAt;
+        try {
+            settleMillis = settle.toMillis();
+            dueAt = Math.addExact(bucketEnd, settleMillis);
+        } catch (ArithmeticException tooLong) {
+            return Optional.empty();
+        }
+        if (nowMillis < dueAt) {
+            return Optional.empty();
+        }
+        Candle closed = current();
+        base = null;
+        forming = null;
+        lateBefore = bucketEnd;
+        return Optional.of(closed);
     }
 
     private boolean hasOpenBucket() {

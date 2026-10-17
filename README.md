@@ -51,13 +51,18 @@ LiveCandleBuilder.Update update = builder.update(minuteSnapshot, minuteIsClosed)
 update.closed();   // 4h candles completed by this update, oldest first
 update.current();  // latest state of the 4h candle this update touched (null if late)
 update.late();     // true when the update was dropped
+
+// On a timer, for streams without a closed flag:
+builder.closeDue(System.currentTimeMillis(), Duration.ofSeconds(5)).ifPresent(publishClosed);
 ```
 
 - A later snapshot of the same source candle replaces the earlier one (exchanges resend
   cumulative snapshots).
-- A target candle closes on the first update of a later bucket, or at once when the bucket's
-  last source candle arrives closed. There is no timer: with no further update, the last
-  candle stays open.
+- A target candle closes on the first update of a later bucket, at once when the bucket's last
+  source candle arrives closed, or when `closeDue(nowMillis, settle)` finds it past its end plus
+  `settle`. Streams with no closed flag (CCXT) or that can go quiet should call `closeDue` on a
+  timer (md's `kline-settle` default is 5s); otherwise the last candle stays open until the next
+  bucket's first update. Updates for a timer-closed bucket are late.
 - Updates older than the newest accepted source candle, covered by the seed, or for a closed
   bucket are late: dropped and reported, never merged.
 - One builder per stream and target; not thread-safe.

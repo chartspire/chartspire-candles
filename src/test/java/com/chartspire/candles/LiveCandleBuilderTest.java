@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
@@ -245,6 +246,84 @@ class LiveCandleBuilderTest {
                                         false))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("aligned");
+    }
+
+    private static final Duration SETTLE = Duration.ofSeconds(5);
+
+    @Test
+    void closeDueWaitsForTheBucketEndPlusSettle() {
+        LiveCandleBuilder builder = new LiveCandleBuilder(M1, M5);
+        builder.update(candle("10:00", "1", "2", "1", "2", "1"), false);
+        builder.update(candle("10:03", "2", "3", "2", "3", "1"), false);
+
+        assertThat(builder.closeDue(millis("10:05") + 4_999, SETTLE)).isEmpty();
+        assertThat(builder.closeDue(millis("10:05") + 5_000, SETTLE))
+                .contains(candle("10:00", "1", "3", "1", "3", "2"));
+        assertThat(builder.closeDue(millis("10:06"), SETTLE)).isEmpty();
+    }
+
+    @Test
+    void zeroSettleClosesAtTheBucketEnd() {
+        LiveCandleBuilder builder = new LiveCandleBuilder(M1, M5);
+        builder.update(candle("10:04", "1", "1", "1", "1", "1"), false);
+
+        assertThat(builder.closeDue(millis("10:05") - 1, Duration.ZERO)).isEmpty();
+        assertThat(builder.closeDue(millis("10:05"), Duration.ZERO)).isPresent();
+    }
+
+    @Test
+    void updatesForATimerClosedBucketAreLateAndTheNextBucketStartsClean() {
+        LiveCandleBuilder builder = new LiveCandleBuilder(M1, M5);
+        builder.update(candle("10:04", "1", "1", "1", "1", "1"), false);
+        builder.closeDue(millis("10:05") + 5_000, SETTLE);
+
+        LiveCandleBuilder.Update late =
+                builder.update(candle("10:04", "1", "9", "1", "9", "2"), true);
+        LiveCandleBuilder.Update next =
+                builder.update(candle("10:05", "2", "2", "2", "2", "1"), false);
+
+        assertThat(late.late()).isTrue();
+        assertThat(next.closed()).isEmpty();
+        assertThat(next.current()).isEqualTo(candle("10:05", "2", "2", "2", "2", "1"));
+    }
+
+    @Test
+    void closeDueWithNothingOpenClosesNothing() {
+        LiveCandleBuilder builder = new LiveCandleBuilder(M1, M5);
+        assertThat(builder.closeDue(millis("23:59"), SETTLE)).isEmpty();
+
+        builder.update(candle("10:04", "1", "1", "1", "1", "1"), true);
+        assertThat(builder.closeDue(millis("23:59"), SETTLE)).isEmpty();
+    }
+
+    @Test
+    void closeDueClosesASeededBucket() {
+        LiveCandleBuilder builder = new LiveCandleBuilder(M1, H4);
+        Candle seed = candle("08:00", "1", "2", "1", "2", "3");
+        builder.seed(seed, millis("10:00"));
+
+        assertThat(builder.closeDue(millis("12:00") + 5_000, SETTLE)).contains(seed);
+    }
+
+    @Test
+    void closeDueNeverOverflows() {
+        LiveCandleBuilder builder = new LiveCandleBuilder(M1, M5);
+        builder.update(candle("10:00", "1", "1", "1", "1", "1"), false);
+
+        assertThat(builder.closeDue(Long.MAX_VALUE, Duration.ofSeconds(Long.MAX_VALUE))).isEmpty();
+        assertThat(builder.closeDue(Long.MIN_VALUE, Duration.ZERO)).isEmpty();
+        assertThat(builder.closeDue(Long.MAX_VALUE, Duration.ofMillis(Long.MAX_VALUE))).isEmpty();
+        assertThat(builder.closeDue(Long.MAX_VALUE, SETTLE)).isPresent();
+    }
+
+    @Test
+    void closeDueRejectsNegativeOrNullSettle() {
+        LiveCandleBuilder builder = new LiveCandleBuilder(M1, M5);
+
+        assertThatThrownBy(() -> builder.closeDue(0, Duration.ofMillis(-1)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> builder.closeDue(0, null))
+                .isInstanceOf(NullPointerException.class);
     }
 
     @Test

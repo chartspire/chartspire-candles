@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -93,6 +94,30 @@ class LiveGoldenTest {
             assertThat(builder.update(forming(candle), false).current()).isEqualTo(expectedForming);
             assertThat(builder.update(candle, true).current()).isEqualTo(expectedFinal);
         }
+    }
+
+    /**
+     * CCXT gives no closed flag: every snapshot is sent unclosed, and a timer calls {@link
+     * LiveCandleBuilder#closeDue} 5s after each minute ends, before the next minute's first update.
+     */
+    @ParameterizedTest(name = "{0}")
+    @ValueSource(strings = {"1m", "5m", "15m", "1h", "4h", "8h", "1d"})
+    void timerClosesWithoutClosedFlagsEqualHistoricalCandles(String targetText) {
+        Timeframe source = Timeframe.parse("1m");
+        Timeframe target = Timeframe.parse(targetText);
+        Duration settle = Duration.ofSeconds(5);
+        List<Candle> history = read("minutes", source);
+        LiveCandleBuilder builder = new LiveCandleBuilder(source, target);
+
+        List<Candle> live = new ArrayList<>();
+        for (Candle candle : history) {
+            live.addAll(builder.update(forming(candle), false).closed());
+            live.addAll(builder.update(candle, false).closed());
+            long minuteEnd = source.nextBucketOpen(candle.openTime());
+            builder.closeDue(minuteEnd + settle.toMillis(), settle).ifPresent(live::add);
+        }
+
+        assertThat(live).isEqualTo(Resampler.resample(source, target, history));
     }
 
     /** An earlier, partial snapshot of {@code candle}: no move yet, half the volume. */
