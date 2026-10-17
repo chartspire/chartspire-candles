@@ -25,6 +25,7 @@ class TimeframeParseTest {
         "1M, MONTH, 1",
         "3M, MONTH, 3",
         "12M, MONTH, 12",
+        "1y, YEAR, 1",
     })
     void parsesUnitAndCount(String text, Unit unit, int count) {
         Timeframe timeframe = Timeframe.parse(text);
@@ -46,7 +47,7 @@ class TimeframeParseTest {
                 "1H",
                 "1D",
                 "1W",
-                "1y",
+                "1Y",
                 " 1m",
                 "1m ",
                 "1.5h",
@@ -56,6 +57,14 @@ class TimeframeParseTest {
     void rejectsMalformedText(String text) {
         assertThatThrownBy(() -> Timeframe.parse(text))
                 .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"2y", "10y"})
+    void onlyOneYearIsSupported(String text) {
+        assertThatThrownBy(() -> Timeframe.parse(text))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("year count must be 1");
     }
 
     @ParameterizedTest

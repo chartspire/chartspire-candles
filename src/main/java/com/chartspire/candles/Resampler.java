@@ -55,7 +55,10 @@ public final class Resampler {
         return List.copyOf(result);
     }
 
-    private static Candle merge(Candle left, Candle right) {
+    /**
+     * Folds {@code right}, the later candle, into {@code left}, keeping {@code left}'s open time.
+     */
+    static Candle merge(Candle left, Candle right) {
         return new Candle(
                 left.openTime(),
                 left.open(),
@@ -70,7 +73,7 @@ public final class Resampler {
         return left == null || right == null ? null : left.add(right);
     }
 
-    private static Candle withOpenTime(Candle candle, long openTime) {
+    static Candle withOpenTime(Candle candle, long openTime) {
         return new Candle(
                 openTime,
                 candle.open(),

@@ -15,7 +15,7 @@ class TimeframeBuildTest {
             List.of(
                     "1m", "3m", "5m", "7m", "10m", "15m", "30m", "45m", "60m", "1h", "2h", "4h",
                     "5h", "6h", "8h", "12h", "1d", "2d", "3d", "7d", "1w", "2w", "1M", "2M", "3M",
-                    "4M", "6M", "12M");
+                    "4M", "6M", "12M", "1y");
 
     @ParameterizedTest(name = "{1} from {0}: {2}")
     @CsvSource({
@@ -41,6 +41,17 @@ class TimeframeBuildTest {
         "1w, 2w, true",
         "1M, 3M, true",
         "3M, 12M, true",
+        "1M, 1y, true",
+        "6M, 1y, true",
+        "12M, 1y, true",
+        "1y, 12M, true",
+        "1d, 1y, true",
+        "1m, 1y, true",
+        "1y, 6M, false",
+        "1y, 1d, false",
+        "1w, 1y, false",
+        "1y, 146097d, true",
+        "1y, 20871w, false",
         "1h, 60m, true",
         "1h, 1h, true",
         // not exact multiples
