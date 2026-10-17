@@ -35,10 +35,39 @@ List<Candle> fiveMinute = fetchAllPages(source, range.from(), range.toExclusive(
 List<Candle> fourHour = Resampler.resample(source, target, fiveMinute);
 ```
 
+## Live candles
+
+`LiveCandleBuilder` folds a stream of source candle snapshots (normally the exchange's 1m kline
+stream) into one target timeframe, using the same merge as `Resampler`:
+
+```java
+LiveCandleBuilder builder = new LiveCandleBuilder(Timeframe.parse("1m"), Timeframe.parse("4h"));
+
+// Optional, when subscribing mid-bucket: the 4h candle so far, built with Resampler from
+// closed history candles opening before coveredUntil (leave the forming minute out).
+builder.seed(partialFourHour, coveredUntil);
+
+LiveCandleBuilder.Update update = builder.update(minuteSnapshot, minuteIsClosed);
+update.closed();   // 4h candles completed by this update, oldest first
+update.current();  // latest state of the 4h candle this update touched (null if late)
+update.late();     // true when the update was dropped
+```
+
+- A later snapshot of the same source candle replaces the earlier one (exchanges resend
+  cumulative snapshots).
+- A target candle closes on the first update of a later bucket, or at once when the bucket's
+  last source candle arrives closed. There is no timer: with no further update, the last
+  candle stays open.
+- Updates older than the newest accepted source candle, covered by the seed, or for a closed
+  bucket are late: dropped and reported, never merged.
+- One builder per stream and target; not thread-safe.
+- Live: build from 1m. History: build from the largest native interval that divides the target
+  (for example `3d` from `1d`).
+
 ## Rules
 
-- Timeframes are `<count><unit>`: `m`, `h`, `d`, `w`, `M` (for example `15m`, `4h`, `3d`, `1w`, `1M`).
-  A month count must divide 12.
+- Timeframes are `<count><unit>`: `m`, `h`, `d`, `w`, `M`, `y` (for example `15m`, `4h`, `3d`, `1w`, `1M`, `1y`).
+  A month count must divide 12; the only year is `1y` (same buckets as `12M`).
 - Bucket opens: minutes, hours and days count from 1970-01-01 UTC, weeks start on Monday, and
   months are calendar months aligned to the year. Binance anchors `3d` at each symbol's first
   bar instead, so rebuilt `3d` bars differ from Binance's native ones for many symbols.
