@@ -66,3 +66,21 @@ List<Candle> fourHour = Resampler.resample(source, target, fiveMinute);
 ./mvnw verify    # tests, Spotless (AOSP) check, JaCoCo gate
 ./mvnw install   # publish to the local Maven repository
 ```
+
+## Release (Maven Central)
+
+Coordinates: `com.chartspire:chartspire-candles`. Licensed under Apache-2.0 (`LICENSE`).
+
+One-time setup:
+
+1. Sign in at central.sonatype.com and verify the `com.chartspire` namespace (DNS TXT record on
+   chartspire.com).
+2. Create a GPG key, publish the public key to `keyserver.ubuntu.com`, and generate a Central
+   user token.
+3. Add repository secrets: `CENTRAL_USERNAME`, `CENTRAL_PASSWORD` (the user token),
+   `GPG_PRIVATE_KEY` (`gpg --armor --export-secret-keys <id>`), `GPG_PASSPHRASE`.
+
+Each release: merge to `main`, then `git tag v0.1.0 && git push origin v0.1.0`. The `release`
+workflow sets the version from the tag, runs `verify`, signs, and uploads to Central. The upload
+is not auto-published: check it and press Publish in the Central portal. Published versions can
+never be changed or deleted.
